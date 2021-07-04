@@ -1,0 +1,92 @@
+version: '3.1'
+services:
+  wordpress:
+   build: .
+   restart: always
+   environment:
+     WORDPRESS_DB_HOST: 
+     WORDPRESS_DB_USER: 
+     WORDPRESS_DB_PASSWORD: 
+     WORDPRESS_DB_NAME: 
+   volumes:
+     - wordpress:/var/www/html
+     - ./php-conf/php.ini:/usr/local/etc/php/conf.d/php.ini
+     - ./php-conf/php-fpm.d/www.conf:/usr/local/etc/php-fpm.d/www.conf
+   networks:
+     - app-network
+
+  db:
+    image: mysql:5.7
+    restart: always
+    environment:
+      MYSQL_DATABASE: 
+      MYSQL_USER: 
+      MYSQL_PASSWORD: 
+      MYSQL_ROOT_PASSWORD: 
+    volumes:
+      - db:/var/lib/mysql
+      - ./mysql_conf:/etc/mysql/conf.d
+    networks:
+      - app-network
+
+  webserver:
+    depends_on:
+      - wordpress
+    image: nginx:1.19.6-alpine
+    container_name: webserver
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8090:8090"
+    volumes:
+      - wordpress:/var/www/html
+      - ./nginx_conf/:/etc/nginx/
+    networks:
+      - app-network
+
+        #  phpmyadmin:
+        #    image: phpmyadmin/phpmyadmin
+        #    container_name: pma
+        #    links:
+        #      - db
+        #    environment:
+        #      PMA_HOST: db
+        #      PMA_PORT: 3306
+        #      PMA_ARBITRARY: 1
+        #    restart: always
+        #    ports:
+        #      - 8081:80
+        #    networks:
+        #      - app-network
+
+
+  mysql_exporter:
+    image: prom/mysqld-exporter
+    restart: always
+    environment:
+      DATA_SOURCE_NAME: ""
+    ports:
+      - 9104:9104
+    command: ["--collect.info_schema.innodb_cmp", "--collect.info_schema.schemastats", "--collect.info_schema.tablestats", "--collect.engine_innodb_status", "--collect.info_schema.query_response_time", "--collect.info_schema.innodb_cmpmem", "--collect.perf_schema.memory_events", "--collect.perf_schema.tablelocks", "--collect.global_status", "--collect.global_variables", "--collect.info_schema.innodb_metrics"]
+    networks:
+      - app-network
+
+  php-fpm-exporter:
+    image: bakins/php-fpm-exporter:v0.6.1
+    container_name: php-fpm-exporter
+    restart: unless-stopped
+    command: ["--fastcgi", "tcp://wordpress:9000/status", "--addr", "0.0.0.0:9523"]
+    ports:
+      - "9523:9523"
+    networks:
+      - app-network
+
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  wordpress:
+  db:
